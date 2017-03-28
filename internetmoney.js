@@ -17,7 +17,6 @@
 const
 	events = require("events"),
 	dgram = require("dgram"),
-	ip = require("ip"),
 	UBJSON = require("ubjson"),
 	_ = require("underscore"),
 	LRU = require("lru");
@@ -74,6 +73,7 @@ class PeerList {
 **/
 class PeerTalkSocket extends events.EventEmitter {
 	constructor(config) {
+		config = config || {};
 		super();
 		
 		let pl = (config.peerLimit|0) || DEF_PEER_LIMIT;
@@ -120,7 +120,10 @@ class PeerTalkSocket extends events.EventEmitter {
 	}
 	
 	listen(port, addr) {
-		this.socket.bind(port || DEF_PORT, addr);
+		this.socket.bind({
+			port: port || DEF_PORT,
+			address: addr
+		});
 		return this;
 	}
 	
@@ -154,25 +157,32 @@ class PeerTalkSocket extends events.EventEmitter {
 	}
 	
 	send(obj, to) {
-		UBJSON.packToBuffer(obj, (err, val) => {
+		const buf = new Buffer(4096);
+		UBJSON.packToBuffer(obj, buf, (err, off) => {
 			if(err) {
 				this.emit('error', err);
 			}
 			else {
-				this.sendRaw(val, to);
+				this.sendRaw(buf.slice(0, off), to);
 			}
 		});
 		return this;
 	}
 	
 	sendRaw(val, to) {
-		this.socket.send(val, 0, val.length, to.port|0, to.address + "");
+		this.socket.send(
+			val, 0, val.length,
+			(to.port|0) || DEF_PORT, to.address + ""
+		);
 		return this;
 	}
 }
 
 class PeerTalkClient extends PeerTalkSocket {
-	constructor() {
+	constructor(config) {
+		config = config || {};
+		super(config);
+		
 		// Respond with pong
 		this.on('ping', (data, rinfo) => {
 			this.send({q: "pong", t: Date.now()});
