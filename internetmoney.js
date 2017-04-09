@@ -1,11 +1,11 @@
 /**
  * Internet Money implementation checklist:
- *
- 1. Message parsing, server-client model
- 2. Resource-hash mapping
+ * c
+ 1/ Message parsing, server-client model
+ 2/ Resource-hash mapping
  3. Block acyclical graph
  4. Code processing (VM)
- 5. Waiting for resources
+ 5. WaitinӨ g for resources
  6. Block verification
  7. Workers (RSA-signed assertions)
  8. Lambda creation (miner)
@@ -19,7 +19,8 @@ const
 	dgram = require("dgram"),
 	UBJSON = require("ubjson"),
 	_ = require("underscore"),
-	LRU = require("lru");
+	LRU = require("lru"),
+	crypto = require("crypto");
 
 const
 	VERSION = 0,
@@ -183,10 +184,22 @@ class PeerTalkClient extends PeerTalkSocket {
 		config = config || {};
 		super(config);
 		
+		this.dht = new LRU((config.dataLimit|0) || DEF_DATA_LIMIT);
+		this.blocks = new LRU(
+			(config.blockLimit|0) || DEF_BLOCK_LIMIT
+		);
+		
 		// Respond with pong
 		this.on('ping', (data, rinfo) => {
 			this.send({q: "pong", t: Date.now()});
 			this.addPeer(rinfo);
+		});
+		
+		//
+		this.on('assert', (data, rinfo) => {
+			if(this.wantHash(data)) {
+				this.addDHT(data);
+			}
 		});
 		
 		// Respond with a list
@@ -230,6 +243,19 @@ class PeerTalkClient extends PeerTalkSocket {
 		this.on('unknown', (data, rinfo) => {
 			this.removePeer(rinfo);
 		});
+	}
+	
+	wantHash(data) {
+		return !!data.hash;
+	}
+	
+	addDHT(data) {
+		let hash = data.hash || (() => {
+			let h = crypto.createHash("sha256");
+			h.update(value);
+			return z85.encode(h.digest());
+		});
+		this.dht.set(hash, data.data);
 	}
 }
 
